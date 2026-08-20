@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  admin
+  scheduler
+}
+
+enum EntityStatus {
+  active
+  inactive
+}
+
+enum DayOfWeek {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+}
+
+enum PeriodDayType {
+  mon_thu
+  friday
+}
+
+enum AbsenceStatus {
+  absent
+  cancelled
+}
+
+enum SubstitutionStatus {
+  pending
+  assigned
+  cancelled
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  name          String
+  username      String   @unique
+  password_hash String
+  role          Role
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @updatedAt @db.Timestamptz(6)
+}
+
+model Teacher {
+  id            Int          @id @default(autoincrement())
+  name          String
+  employee_code String       @unique
+  email         String?      @unique
+  phone         String?
+  designation   String?
+  department    String?
+  status        EntityStatus @default(active)
+  created_at    DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime     @updatedAt @db.Timestamptz(6)
+  timetable     Timetable[]
+  absences      TeacherAbsence[]
+  substitutionsOriginal      Substitution[] @relation("OriginalTeacher")
+  substitutionsSubstitute    Substitution[] @relation("SubstituteTeacher")
+  availability  TeacherAvailability[]
+}
+
+model ClassRoom {
+  id         Int          @id @default(autoincrement())
+  name       String
+  section    String?
+  program    String?
+  class_code String       @unique
+  status     EntityStatus @default(active)
+  created_at DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at DateTime     @updatedAt @db.Timestamptz(6)
+  timetable  Timetable[]
+  substitutions Substitution[]
+}
+
+model Subject {
+  id         Int          @id @default(autoincrement())
+  name       String       @unique
+  short_name String?
+  department String?
+  status     EntityStatus @default(active)
+  created_at DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at DateTime     @updatedAt @db.Timestamptz(6)
+  timetable  Timetable[]
+  substitutions Substitution[]
+}
+
+model Period {
+  id                  Int           @id @default(autoincrement())
+  period_number       Int
+  start_time          DateTime      @db.Time(0)
+  end_time            DateTime      @db.Time(0)
+  applicable_day_type PeriodDayType
+  is_active           Boolean       @default(true)
+  timetable           Timetable[]
+  substitutions       Substitution[]
+  availability        TeacherAvailability[]
+
+  @@unique([period_number, applicable_day_type])
+}
+
+model Timetable {
+  id         Int       @id @default(autoincrement())
+  day        DayOfWeek
+  period_id  Int
+  class_id   Int
+  subject_id Int
+  teacher_id Int?
+  room       String?
+  notes      String?
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @updatedAt @db.Timestamptz(6)
+
+  teacher Teacher?  @relation(fields: [teacher_id], references: [id])
+  class   ClassRoom @relation(fields: [class_id], references: [id])
+  subject Subject   @relation(fields: [subject_id], references: [id])
+  period  Period    @relation(fields: [period_id], references: [id])
+
+  substitutions Substitution[]
+
+  @@unique([day, period_id, class_id])
+}
+
+model TeacherAbsence {
+  id         Int           @id @default(autoincrement())
+  teacher_id Int
+  date       DateTime      @db.Date
+  reason     String?
+  status     AbsenceStatus @default(absent)
+  notes      String?
+  created_at DateTime      @default(now()) @db.Timestamptz(6)
+
+  teacher       Teacher        @relation(fields: [teacher_id], references: [id])
+  substitutions Substitution[]
+}
+
+model Substitution {
+  id                    Int                 @id @default(autoincrement())
+  absence_id            Int
+  timetable_id          Int
+  original_teacher_id   Int
+  substitute_teacher_id Int?
+  date                  DateTime            @db.Date
+  period_id             Int
+  class_id              Int
+  subject_id            Int
+  status                SubstitutionStatus  @default(pending)
+  notes                 String?
+  created_at            DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime            @updatedAt @db.Timestamptz(6)
+
+  absence             TeacherAbsence @relation(fields: [absence_id], references: [id])
+  timetable           Timetable      @relation(fields: [timetable_id], references: [id])
+  original_teacher    Teacher        @relation("OriginalTeacher", fields: [original_teacher_id], references: [id])
+  substitute_teacher  Teacher?       @relation("SubstituteTeacher", fields: [substitute_teacher_id], references: [id])
+  period              Period         @relation(fields: [period_id], references: [id])
+  class               ClassRoom      @relation(fields: [class_id], references: [id])
+  subject             Subject        @relation(fields: [subject_id], references: [id])
+
+  @@unique([date, period_id, substitute_teacher_id])
+}
+
+model TeacherAvailability {
+  id           Int       @id @default(autoincrement())
+  teacher_id   Int
+  day          DayOfWeek
+  period_id    Int
+  is_available Boolean   @default(true)
+  notes        String?
+
+  teacher Teacher @relation(fields: [teacher_id], references: [id])
+  period  Period  @relation(fields: [period_id], references: [id])
+
+  @@unique([teacher_id, day, period_id])
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  user        String
+  action      String
+  entity      String
+  entity_id   String
+  description String?
+  timestamp   DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model Setting {
+  id                    Int    @id @default(autoincrement())
+  school_name           String @default("Smart Timetable School")
+  school_logo           String?
+  academic_session      String?
+  working_days          String @default("monday,tuesday,wednesday,thursday,friday")
+  default_dashboard_view String @default("today")
+}
