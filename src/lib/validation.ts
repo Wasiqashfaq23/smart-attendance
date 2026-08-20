@@ -10,9 +10,10 @@ export const daySchema = z.enum([
   "wednesday",
   "thursday",
   "friday",
+  "saturday",
 ]);
 
-export const periodDayTypeSchema = z.enum(["mon_thu", "friday"]);
+export const periodDayTypeSchema = z.enum(["mon_thu", "friday", "saturday"]);
 
 export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
   message: "Date must be YYYY-MM-DD",
@@ -39,6 +40,7 @@ export const classSchema = z.object({
   section: z.string().trim().max(40).optional().nullable(),
   program: z.string().trim().max(100).optional().nullable(),
   class_code: z.string().trim().min(1, "Class code is required").max(40),
+  class_teacher_id: z.union([idSchema, z.literal(""), z.null()]).optional().nullable(),
   status: statusSchema.default("active"),
 });
 
@@ -61,8 +63,8 @@ export const timetableSchema = z.object({
   day: daySchema,
   period_id: idSchema,
   class_id: idSchema,
-  subject_id: idSchema,
-  teacher_id: z.union([idSchema, z.literal(""), z.null()]).optional().nullable(),
+  subject_ids: z.array(idSchema).min(1, "Select at least one subject"),
+  teacher_ids: z.array(idSchema).optional(),
   room: z.string().trim().max(80).optional().nullable(),
   notes: z.string().trim().max(255).optional().nullable(),
   is_active: z.coerce.boolean().default(true),
@@ -91,10 +93,21 @@ export const substitutionAssignSchema = z.object({
 
 export const settingsSchema = z.object({
   school_name: z.string().trim().min(1, "School name is required").max(255),
-  school_logo: z.string().trim().max(255).optional().nullable(),
+  school_logo: z
+    .string()
+    .trim()
+    .max(8_000_000, "Logo image is too large")
+    .optional()
+    .nullable(),
   academic_session: z.string().trim().max(60).optional().nullable(),
-  working_days: z.string().trim().max(120),
-  default_dashboard_view: z.string().trim().max(60),
+  working_days: z
+    .string()
+    .trim()
+    .max(120)
+    .refine(
+      (v) => v.length > 0,
+      "Select at least one working day"
+    ),
 });
 
 export const userSchema = z.object({
@@ -111,8 +124,8 @@ export function parseTimeToDate(hhmmss: string): Date {
 }
 
 export function formatTime(d: Date | string): string {
-  if (typeof d === "string") return d.slice(0, 8);
-  return d.toISOString().slice(11, 19);
+  if (typeof d === "string") return d.slice(0, 5);
+  return d.toISOString().slice(11, 16);
 }
 
 export function formatDate(d: Date | string): string {

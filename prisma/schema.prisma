@@ -22,11 +22,13 @@ enum DayOfWeek {
   wednesday
   thursday
   friday
+  saturday
 }
 
 enum PeriodDayType {
   mon_thu
   friday
+  saturday
 }
 
 enum AbsenceStatus {
@@ -67,19 +69,23 @@ model Teacher {
   substitutionsOriginal      Substitution[] @relation("OriginalTeacher")
   substitutionsSubstitute    Substitution[] @relation("SubstituteTeacher")
   availability  TeacherAvailability[]
+  additionalTeachers TimetableTeacher[]
+  classTeacherOf ClassRoom[] @relation("ClassTeacher")
 }
 
 model ClassRoom {
-  id         Int          @id @default(autoincrement())
-  name       String
-  section    String?
-  program    String?
-  class_code String       @unique
-  status     EntityStatus @default(active)
-  created_at DateTime     @default(now()) @db.Timestamptz(6)
-  updated_at DateTime     @updatedAt @db.Timestamptz(6)
-  timetable  Timetable[]
-  substitutions Substitution[]
+  id              Int          @id @default(autoincrement())
+  name            String
+  section         String?
+  program         String?
+  class_code      String       @unique
+  class_teacher_id Int?
+  status          EntityStatus @default(active)
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime     @updatedAt @db.Timestamptz(6)
+  timetable       Timetable[]
+  substitutions   Substitution[]
+  class_teacher   Teacher?     @relation("ClassTeacher", fields: [class_teacher_id], references: [id])
 }
 
 model Subject {
@@ -87,16 +93,20 @@ model Subject {
   name       String       @unique
   short_name String?
   department String?
+  is_special Boolean      @default(false)
   status     EntityStatus @default(active)
   created_at DateTime     @default(now()) @db.Timestamptz(6)
   updated_at DateTime     @updatedAt @db.Timestamptz(6)
   timetable  Timetable[]
+  timetableSubjects TimetableSubject[]
   substitutions Substitution[]
 }
 
 model Period {
   id                  Int           @id @default(autoincrement())
   period_number       Int
+  name                String?
+  is_special          Boolean       @default(false)
   start_time          DateTime      @db.Time(0)
   end_time            DateTime      @db.Time(0)
   applicable_day_type PeriodDayType
@@ -126,9 +136,33 @@ model Timetable {
   subject Subject   @relation(fields: [subject_id], references: [id])
   period  Period    @relation(fields: [period_id], references: [id])
 
+  additionalSubjects TimetableSubject[]
+  additionalTeachers TimetableTeacher[]
   substitutions Substitution[]
 
   @@unique([day, period_id, class_id])
+  @@index([teacher_id])
+  @@index([day])
+  @@index([class_id])
+}
+
+model TimetableSubject {
+  timetable_id Int
+  subject_id   Int
+  timetable    Timetable @relation(fields: [timetable_id], references: [id], onDelete: Cascade)
+  subject      Subject   @relation(fields: [subject_id], references: [id], onDelete: Restrict)
+
+  @@id([timetable_id, subject_id])
+}
+
+model TimetableTeacher {
+  timetable_id Int
+  teacher_id   Int
+  timetable    Timetable @relation(fields: [timetable_id], references: [id], onDelete: Cascade)
+  teacher      Teacher   @relation(fields: [teacher_id], references: [id], onDelete: Restrict)
+
+  @@id([timetable_id, teacher_id])
+  @@index([teacher_id])
 }
 
 model TeacherAbsence {
@@ -142,6 +176,9 @@ model TeacherAbsence {
 
   teacher       Teacher        @relation(fields: [teacher_id], references: [id])
   substitutions Substitution[]
+
+  @@index([date])
+  @@index([teacher_id])
 }
 
 model Substitution {
@@ -168,6 +205,8 @@ model Substitution {
   subject             Subject        @relation(fields: [subject_id], references: [id])
 
   @@unique([date, period_id, substitute_teacher_id])
+  @@index([date])
+  @@index([original_teacher_id])
 }
 
 model TeacherAvailability {
@@ -192,13 +231,14 @@ model AuditLog {
   entity_id   String
   description String?
   timestamp   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([timestamp])
 }
 
 model Setting {
-  id                    Int    @id @default(autoincrement())
-  school_name           String @default("Smart Timetable School")
-  school_logo           String?
-  academic_session      String?
-  working_days          String @default("monday,tuesday,wednesday,thursday,friday")
-  default_dashboard_view String @default("today")
+  id               Int    @id @default(autoincrement())
+  school_name      String @default("Smart Timetable School")
+  school_logo      String?
+  academic_session String?
+  working_days     String @default("monday,tuesday,wednesday,thursday,friday,saturday,sunday")
 }

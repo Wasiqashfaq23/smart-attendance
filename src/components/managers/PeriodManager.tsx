@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import type { PeriodDayType } from "@prisma/client";
 import { Button, Badge, PageHeader } from "@/components/ui";
 import { FormModal, DeleteConfirm, fieldError } from "@/components/FormModal";
 import { createPeriod, updatePeriod, deletePeriod } from "@/lib/actions";
@@ -11,7 +12,7 @@ type Period = {
   period_number: number;
   start_time: Date;
   end_time: Date;
-  applicable_day_type: "mon_thu" | "friday";
+  applicable_day_type: PeriodDayType;
   is_active: boolean;
 };
 
@@ -85,12 +86,13 @@ export function PeriodManager({ periods }: { periods: Period[] }) {
 
   const monThu = periods.filter((p) => p.applicable_day_type === "mon_thu");
   const friday = periods.filter((p) => p.applicable_day_type === "friday");
+  const saturday = periods.filter((p) => p.applicable_day_type === "saturday");
 
   return (
     <div>
       <PageHeader
         title="Periods"
-        subtitle={`${monThu.length} Mon–Thu · ${friday.length} Friday`}
+        subtitle={`${monThu.length} Mon–Thu · ${friday.length} Friday · ${saturday.length} Saturday`}
         actions={
           <Button
             onClick={() => {
@@ -116,6 +118,15 @@ export function PeriodManager({ periods }: { periods: Period[] }) {
         <PeriodTable
           rows={friday}
           label="Friday schedule"
+          onEdit={(p) => {
+            setEditing(p);
+            setOpen(true);
+          }}
+          onDelete={(p) => setDeleting(p)}
+        />
+        <PeriodTable
+          rows={saturday}
+          label="Saturday schedule"
           onEdit={(p) => {
             setEditing(p);
             setOpen(true);
@@ -179,6 +190,7 @@ export function PeriodManager({ periods }: { periods: Period[] }) {
                 >
                   <option value="mon_thu">Mon – Thu</option>
                   <option value="friday">Friday</option>
+                  <option value="saturday">Saturday</option>
                 </select>
               </div>
               <label className="flex items-center gap-2 pt-5">

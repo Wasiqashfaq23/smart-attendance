@@ -182,7 +182,6 @@ async function main() {
     school_logo: r.school_logo as string | null,
     academic_session: r.academic_session as string | null,
     working_days: r.working_days as string,
-    default_dashboard_view: r.default_dashboard_view as string,
   }));
 
   const hasAll = (arr: any[], ids: Set<number>, label: string) => {

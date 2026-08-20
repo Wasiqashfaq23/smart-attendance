@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import type { DayOfWeek, PeriodDayType } from "@prisma/client";
+import { DAY_LABELS, dayTypeFor } from "@/lib/weekdays";
 import { Button, Select, Input, Badge, PageHeader } from "@/components/ui";
 import { FormModal, DeleteConfirm, fieldError } from "@/components/FormModal";
 import { saveAvailability, deleteAvailability } from "@/lib/actions";
@@ -22,25 +24,17 @@ export function AvailabilityManager({
 }: {
   rows: Availability[];
   teachers: { id: number; name: string }[];
-  periods: { id: number; period_number: number; applicable_day_type: "mon_thu" | "friday" }[];
+  periods: { id: number; period_number: number; applicable_day_type: PeriodDayType }[];
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Availability | null>(null);
   const [deleting, setDeleting] = useState<Availability | null>(null);
   const [formDay, setFormDay] = useState("monday");
 
-  const dayLabels: Record<string, string> = {
-    monday: "Monday",
-    tuesday: "Tuesday",
-    wednesday: "Wednesday",
-    thursday: "Thursday",
-    friday: "Friday",
-  };
+  const dayLabels: Record<string, string> = DAY_LABELS;
 
-  const filteredPeriods = periods.filter((p) =>
-    formDay === "friday"
-      ? p.applicable_day_type === "friday"
-      : p.applicable_day_type === "mon_thu"
+  const filteredPeriods = periods.filter(
+    (p) => p.applicable_day_type === dayTypeFor(formDay as DayOfWeek)
   );
 
   function onDayChange(v: string) {
@@ -95,7 +89,11 @@ export function AvailabilityManager({
                   <td className="text-slate-500 capitalize">{dayLabels[a.day]}</td>
                   <td className="text-slate-500">
                     P{a.period.period_number}
-                    {a.period.applicable_day_type === "friday" ? " (Fri)" : ""}
+                    {a.period.applicable_day_type === "friday"
+                      ? " (Fri)"
+                      : a.period.applicable_day_type === "saturday"
+                        ? " (Sat)"
+                        : ""}
                   </td>
                   <td>
                     <Badge tone={a.is_available ? "green" : "red"}>
