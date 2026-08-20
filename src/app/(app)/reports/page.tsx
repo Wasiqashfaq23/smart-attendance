@@ -1,18 +1,22 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
 import {
   getClassWeekly,
   getTeacherWeekly,
   getDailySheet,
   getWorkload,
 } from "@/lib/services/report";
+import { getActiveClasses, getActiveTeachers, getSetting } from "@/lib/queries";
+import { activeDays, DAY_LABELS } from "@/lib/weekdays";
 import { TimetableGrid } from "@/components/TimetableGrid";
+import { TimetableCell, cellToneClass } from "@/components/TimetableCell";
+import { MasterTimetable, parseMasterDay } from "@/components/MasterTimetable";
 import { PageHeader, Badge } from "@/components/ui";
 import { PrintButton, SelectNav, DateNav } from "@/components/ReportControls";
 
 export const dynamic = "force-dynamic";
 
 const tabs = [
+  { key: "master", label: "Master timetable" },
   { key: "class", label: "Class schedule" },
   { key: "teacher", label: "Teacher schedule" },
   { key: "daily", label: "Daily sheet" },
@@ -24,23 +28,24 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<{
     tab?: string;
+    day?: string;
     class?: string;
     teacher?: string;
     date?: string;
   }>;
 }) {
   const sp = await searchParams;
-  const tab = tabs.some((t) => t.key === sp.tab) ? sp.tab! : "class";
+  const tab = tabs.some((t) => t.key === sp.tab) ? sp.tab! : "master";
 
   return (
     <div>
       <PageHeader
         title="Reports"
-        subtitle="Weekly schedules, daily sheets and workload"
+        subtitle="Master schedule, weekly schedules, daily sheets and workload"
         actions={<PrintButton />}
       />
 
-      <div className="flex gap-1.5 mb-6 no-print">
+      <div className="flex flex-wrap gap-1.5 mb-6 no-print">
         {tabs.map((t) => {
           const params = new URLSearchParams();
           params.set("tab", t.key);
@@ -60,6 +65,7 @@ export default async function ReportsPage({
         })}
       </div>
 
+      {tab === "master" && <MasterTab sp={sp} />}
       {tab === "class" && <ClassTab sp={sp} />}
       {tab === "teacher" && <TeacherTab sp={sp} />}
       {tab === "daily" && <DailyTab sp={sp} />}
@@ -68,13 +74,17 @@ export default async function ReportsPage({
   );
 }
 
+async function MasterTab({ sp }: { sp: Record<string, string | undefined> }) {
+  const day = parseMasterDay(sp.day);
+  const days = activeDays((await getSetting())?.working_days);
+  return <MasterTimetable day={day} days={days} hrefPrefix="/reports?tab=master" />;
+}
+
 async function ClassTab({ sp }: { sp: Record<string, string | undefined> }) {
-  const classes = await prisma.classRoom.findMany({
-    where: { status: "active" },
-    orderBy: { name: "asc" },
-  });
+  const classes = await getActiveClasses();
   const classId = Number(sp.class) || classes[0]?.id || 0;
-  const data = classId ? await getClassWeekly(classId) : null;
+  const days = activeDays((await getSetting())?.working_days);
+  const data = classId ? await getClassWeekly(classId, days) : null;
 
   return (
     <div className="space-y-4">
@@ -102,12 +112,10 @@ async function ClassTab({ sp }: { sp: Record<string, string | undefined> }) {
 }
 
 async function TeacherTab({ sp }: { sp: Record<string, string | undefined> }) {
-  const teachers = await prisma.teacher.findMany({
-    where: { status: "active" },
-    orderBy: { name: "asc" },
-  });
+  const teachers = await getActiveTeachers();
   const teacherId = Number(sp.teacher) || teachers[0]?.id || 0;
-  const data = teacherId ? await getTeacherWeekly(teacherId) : null;
+  const days = activeDays((await getSetting())?.working_days);
+  const data = teacherId ? await getTeacherWeekly(teacherId, days) : null;
 
   return (
     <div className="space-y-4">
@@ -192,41 +200,26 @@ async function DailyTab({ sp }: { sp: Record<string, string | undefined> }) {
                 <tr key={p.id}>
                   <td className="whitespace-nowrap">
                     <span className="font-semibold text-slate-800">
-                      P{p.period_number}
+                      {p.name ?? `P${p.period_number}`}
                     </span>
                   </td>
                   {data.classes.map((c) => {
                     const cell = data.grid[c.id]?.[p.id];
                     return (
-                      <td key={c.id} className="align-top">
+                      <td
+                        key={c.id}
+                        className={`align-top ${cell ? cellToneClass(cell) : ""}`}
+                      >
                         {cell ? (
-                          <div>
-                            <p className="font-medium text-slate-800 leading-snug">
-                              {cell.subject.short_name ?? cell.subject.name}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {cell.teacher?.name ?? (
-                                <span className="text-amber-600">No teacher</span>
-                              )}
-                            </p>
-                            {cell.substitution ? (
-                              <p
-                                className={`text-xs mt-0.5 ${
-                                  cell.substitution.status === "assigned"
-                                    ? "text-emerald-600"
-                                    : "text-amber-600"
-                                }`}
-                              >
-                                {cell.substitution.status === "assigned"
-                                  ? `Covered by ${cell.substitution.substitute_teacher?.name}`
-                                  : "Needs coverage"}
-                              </p>
-                            ) : cell.is_covered === false ? (
-                              <p className="text-xs text-red-600 mt-0.5">
-                                Teacher absent — uncovered
-                              </p>
-                            ) : null}
-                          </div>
+                          <TimetableCell
+                            entry={cell}
+                            showTeacher
+                            showNoTeacher
+                            meta={{
+                              substitution: cell.substitution,
+                              is_covered: cell.is_covered,
+                            }}
+                          />
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
@@ -245,13 +238,14 @@ async function DailyTab({ sp }: { sp: Record<string, string | undefined> }) {
 
 async function WorkloadTab() {
   const rows = await getWorkload();
-  const days = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const;
+  const days = activeDays((await getSetting())?.working_days);
   const dayShort: Record<string, string> = {
     monday: "Mon",
     tuesday: "Tue",
     wednesday: "Wed",
     thursday: "Thu",
     friday: "Fri",
+    saturday: "Sat",
   };
 
   return (

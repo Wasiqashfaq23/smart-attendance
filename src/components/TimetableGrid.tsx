@@ -1,24 +1,84 @@
-import type { DayOfWeek } from "@prisma/client";
+import type { DayOfWeek, PeriodDayType } from "@prisma/client";
 import { formatTime } from "@/lib/validation";
+import { dayTypeFor, DAY_LABELS } from "@/lib/weekdays";
+import {
+  TimetableCell,
+  cellToneClass,
+  type TimetableCellEntry,
+} from "@/components/TimetableCell";
+
+export {
+  combinedSubjectNames,
+  combinedTeacherNames,
+  isSpecialEntry,
+  isBreakEntry,
+  type TimetableCellEntry,
+} from "@/components/TimetableCell";
 
 type PeriodRow = {
   id: number;
   period_number: number;
+  name?: string | null;
+  is_special?: boolean;
   start_time: Date;
   end_time: Date;
-  applicable_day_type: "mon_thu" | "friday";
+  applicable_day_type: PeriodDayType;
 };
 
-export type TimetableCellEntry = {
-  id: number;
-  day: DayOfWeek;
-  period_id: number;
-  subject?: { name: string; short_name: string | null } | null;
-  teacher?: { name: string } | null;
-  class?: { name: string } | null;
-  room?: string | null;
-  notes?: string | null;
-} | null;
+type Slot = {
+  period_number: number;
+  label: string;
+  extraLabel: string | null;
+  monThu?: PeriodRow;
+  friday?: PeriodRow;
+  saturday?: PeriodRow;
+};
+
+function buildSlots(periods: PeriodRow[]): Slot[] {
+  const byNumber = new Map<number, Slot>();
+  const slots: Slot[] = [];
+  for (const p of periods) {
+    let s = byNumber.get(p.period_number);
+    if (!s) {
+      s = {
+        period_number: p.period_number,
+        label: "",
+        extraLabel: null,
+        monThu: undefined,
+        friday: undefined,
+        saturday: undefined,
+      };
+      byNumber.set(p.period_number, s);
+      slots.push(s);
+    }
+    if (p.applicable_day_type === "friday") s.friday = p;
+    else if (p.applicable_day_type === "saturday") s.saturday = p;
+    else s.monThu = p;
+  }
+  slots.sort((a, b) => a.period_number - b.period_number);
+  for (const s of slots) {
+    const base = s.monThu ?? s.friday ?? s.saturday;
+    if (s.period_number === 0) {
+      s.label = "0";
+      s.extraLabel = "Assembly";
+    } else {
+      s.label = String(s.period_number);
+      if (base?.name && !/^p\d*$/i.test(base.name)) s.extraLabel = base.name;
+    }
+  }
+  return slots;
+}
+
+function slotPeriod(s: Slot, day: DayOfWeek): PeriodRow | undefined {
+  const want = dayTypeFor(day);
+  if (want === "friday") return s.friday ?? s.monThu;
+  if (want === "saturday") return s.saturday ?? s.monThu;
+  return s.monThu ?? s.friday;
+}
+
+function timeRange(p?: PeriodRow): string {
+  return p ? `${formatTime(p.start_time)} – ${formatTime(p.end_time)}` : "—";
+}
 
 export function TimetableGrid({
   days,
@@ -37,13 +97,9 @@ export function TimetableGrid({
   showTeacher?: boolean;
   cellRenderer?: (day: DayOfWeek, period: PeriodRow, entry: TimetableCellEntry) => React.ReactNode;
 }) {
-  const dayLabels: Record<string, string> = {
-    monday: "Monday",
-    tuesday: "Tuesday",
-    wednesday: "Wednesday",
-    thursday: "Thursday",
-    friday: "Friday",
-  };
+  const dayLabels: Record<string, string> = DAY_LABELS;
+
+  const slots = buildSlots(periods);
 
   return (
     <div className="card overflow-hidden">
@@ -57,55 +113,92 @@ export function TimetableGrid({
         <table className="tbl w-full">
           <thead>
             <tr>
-              <th className="min-w-[110px]">Period</th>
-              {days.map((d) => (
-                <th key={d} className="min-w-[140px]">
-                  {dayLabels[d]}
+              <th className="min-w-[96px]">Day</th>
+              {slots.map((s) => (
+                <th key={s.period_number} className="min-w-[88px]">
+                  <span className="block font-semibold">{s.label}</span>
+                  {s.extraLabel ? (
+                    <span className="block text-xs font-normal text-slate-400">
+                      {s.extraLabel}
+                    </span>
+                  ) : null}
+                </th>
+              ))}
+            </tr>
+            <tr>
+              <th className="text-xs font-normal text-slate-500 whitespace-nowrap">
+                Mon–Thu time
+              </th>
+              {slots.map((s) => (
+                <th
+                  key={s.period_number}
+                  className="text-xs font-normal text-slate-400 whitespace-nowrap"
+                >
+                  {timeRange(s.monThu)}
+                </th>
+              ))}
+            </tr>
+            <tr>
+              <th className="text-xs font-normal text-slate-500 whitespace-nowrap">
+                Friday time
+              </th>
+              {slots.map((s) => (
+                <th
+                  key={s.period_number}
+                  className="text-xs font-normal text-slate-400 whitespace-nowrap"
+                >
+                  {timeRange(s.friday)}
+                </th>
+              ))}
+            </tr>
+            <tr>
+              <th className="text-xs font-normal text-slate-500 whitespace-nowrap">
+                Saturday time
+              </th>
+              {slots.map((s) => (
+                <th
+                  key={s.period_number}
+                  className="text-xs font-normal text-slate-400 whitespace-nowrap"
+                >
+                  {timeRange(s.saturday)}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {periods.map((p) => (
-              <tr key={p.id}>
+            {days.map((d) => (
+              <tr key={d}>
                 <td className="whitespace-nowrap">
-                  <span className="font-semibold text-slate-800">
-                    P{p.period_number}
-                  </span>
-                  <span className="block text-xs text-slate-400">
-                    {formatTime(p.start_time)} – {formatTime(p.end_time)}
-                  </span>
+                  <span className="font-semibold text-slate-800">{dayLabels[d]}</span>
                 </td>
-                {days.map((d) => {
-                  const entry = grid[d]?.[p.id] ?? null;
+                {slots.map((s) => {
+                  const period = slotPeriod(s, d);
+                  if (!period) {
+                    return (
+                      <td key={s.period_number}>
+                        <span className="text-slate-300">—</span>
+                      </td>
+                    );
+                  }
+                  const entry = grid[d]?.[period.id] ?? null;
                   if (cellRenderer) {
                     return (
-                      <td key={d}>
-                        {cellRenderer(d, p, entry)}
+                      <td key={s.period_number}>{cellRenderer(d, period, entry)}</td>
+                    );
+                  }
+                  if (entry) {
+                    return (
+                      <td
+                        key={s.period_number}
+                        className={`align-top ${cellToneClass(entry)}`}
+                      >
+                        <TimetableCell entry={entry} showTeacher={showTeacher} />
                       </td>
                     );
                   }
                   return (
-                    <td key={d} className="align-top">
-                      {entry ? (
-                        <div>
-                          <p className="font-medium text-slate-800 leading-snug">
-                            {entry.subject?.short_name ?? entry.subject?.name ?? "—"}
-                          </p>
-                          {showTeacher && entry.teacher ? (
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {entry.teacher.name}
-                            </p>
-                          ) : null}
-                          {entry.room ? (
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              Room {entry.room}
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
+                    <td key={s.period_number} className="align-top">
+                      <span className="text-slate-300">—</span>
                     </td>
                   );
                 })}

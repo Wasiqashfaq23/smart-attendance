@@ -12,10 +12,18 @@ type ClassRoom = {
   section: string | null;
   program: string | null;
   class_code: string;
+  class_teacher_id: number | null;
+  class_teacher?: { id: number; name: string } | null;
   status: string;
 };
 
-export function ClassManager({ classes }: { classes: ClassRoom[] }) {
+export function ClassManager({
+  classes,
+  teachers,
+}: {
+  classes: ClassRoom[];
+  teachers: { id: number; name: string }[];
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ClassRoom | null>(null);
   const [deleting, setDeleting] = useState<ClassRoom | null>(null);
@@ -47,6 +55,7 @@ export function ClassManager({ classes }: { classes: ClassRoom[] }) {
                 <th>Name</th>
                 <th>Section</th>
                 <th>Program</th>
+                <th>Class teacher</th>
                 <th>Code</th>
                 <th>Status</th>
                 <th className="no-print"></th>
@@ -58,6 +67,9 @@ export function ClassManager({ classes }: { classes: ClassRoom[] }) {
                   <td className="font-medium">{c.name}</td>
                   <td className="text-slate-500">{c.section ?? "—"}</td>
                   <td className="text-slate-500">{c.program ?? "—"}</td>
+                  <td className="text-slate-500">
+                    {c.class_teacher?.name ?? "—"}
+                  </td>
                   <td className="text-slate-500">{c.class_code}</td>
                   <td>
                     <Badge tone={statusTone(c.status)}>{c.status}</Badge>
@@ -137,6 +149,18 @@ export function ClassManager({ classes }: { classes: ClassRoom[] }) {
                 <option value="inactive">Inactive</option>
               </Select>
             </div>
+            <Select
+              label="Class teacher"
+              name="class_teacher_id"
+              defaultValue={editing?.class_teacher_id ?? ""}
+            >
+              <option value="">No class teacher</option>
+              {teachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
           </>
         )}
       </FormModal>

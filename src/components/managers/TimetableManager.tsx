@@ -3,10 +3,17 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import type { DayOfWeek } from "@prisma/client";
-import { Button, Select, PageHeader, Badge } from "@/components/ui";
+import type { DayOfWeek, PeriodDayType } from "@prisma/client";
+import { DAY_LABELS } from "@/lib/weekdays";
+import { Button, PageHeader, Badge } from "@/components/ui";
 import { FormModal, DeleteConfirm, fieldError } from "@/components/FormModal";
-import { TimetableGrid, type TimetableCellEntry } from "@/components/TimetableGrid";
+import {
+  TimetableGrid,
+  combinedSubjectNames,
+  combinedTeacherNames,
+  isSpecialEntry,
+  type TimetableCellEntry,
+} from "@/components/TimetableGrid";
 import {
   createTimetable,
   updateTimetable,
@@ -16,9 +23,11 @@ import {
 type PeriodRow = {
   id: number;
   period_number: number;
+  name?: string | null;
+  is_special?: boolean;
   start_time: Date;
   end_time: Date;
-  applicable_day_type: "mon_thu" | "friday";
+  applicable_day_type: PeriodDayType;
 };
 
 type Entry = {
@@ -31,9 +40,11 @@ type Entry = {
   room: string | null;
   notes: string | null;
   is_active: boolean;
-  subject?: { name: string; short_name: string | null } | null;
-  teacher?: { name: string } | null;
+  subject?: { id: number; name: string; short_name: string | null; is_special?: boolean } | null;
+  teacher?: { id: number; name: string } | null;
   class?: { name: string } | null;
+  additionalSubjects?: { subject: { id: number; name: string; short_name: string | null; is_special?: boolean } }[];
+  additionalTeachers?: { teacher: { id: number; name: string } }[];
 };
 
 const isEntry = (e: TimetableCellEntry): e is Entry =>
@@ -51,7 +62,7 @@ export function TimetableManager({
   periods: PeriodRow[];
   grid: Record<string, Record<number, TimetableCellEntry>>;
   classes: { id: number; name: string }[];
-  subjects: { id: number; name: string; short_name: string | null }[];
+  subjects: { id: number; name: string; short_name: string | null; is_special?: boolean }[];
   teachers: { id: number; name: string }[];
 }) {
   const router = useRouter();
@@ -76,19 +87,31 @@ export function TimetableManager({
     setOpen(true);
   }
 
-  const dayLabels: Record<string, string> = {
-    monday: "Monday",
-    tuesday: "Tuesday",
-    wednesday: "Wednesday",
-    thursday: "Thursday",
-    friday: "Friday",
-  };
+  const dayLabels: Record<string, string> = DAY_LABELS;
+
+  const periodLabel = (p: PeriodRow) => p.name ?? `P${p.period_number}`;
+
+  const selectedSubjectIds = editing
+    ? [
+        editing.subject_id,
+        ...(editing.additionalSubjects ?? []).map((s) => s.subject.id),
+      ]
+    : [];
+  const selectedTeacherIds = editing
+    ? [
+        ...(editing.teacher_id ? [editing.teacher_id] : []),
+        ...(editing.additionalTeachers ?? []).map((t) => t.teacher.id),
+      ]
+    : [];
+
+  const normalSubjects = subjects.filter((s) => !s.is_special);
+  const specialSubjects = subjects.filter((s) => s.is_special);
 
   return (
     <div>
       <PageHeader
         title="Timetable"
-        subtitle="Click any cell to assign a subject and teacher"
+        subtitle="Click any cell to assign subjects and teachers (multiple allowed)"
         actions={
           <div className="flex items-center gap-2">
             <select className="input max-w-[200px]" value={selectedClass} onChange={(e) => onClassChange(e.target.value)}>
@@ -112,13 +135,19 @@ export function TimetableManager({
           <div className="group relative">
             {entry ? (
               <>
-                <div className="rounded-lg bg-brand-50 border border-brand-100 px-2 py-1.5">
+                <div
+                  className={`rounded-lg px-2 py-1.5 ${
+                    isSpecialEntry(entry)
+                      ? "bg-amber-50 border border-amber-200"
+                      : "bg-brand-50 border border-brand-100"
+                  }`}
+                >
                   <p className="font-medium text-slate-800 text-xs leading-snug">
-                    {entry.subject?.short_name ?? entry.subject?.name ?? "—"}
+                    {combinedSubjectNames(entry)}
                   </p>
-                  {entry.teacher ? (
+                  {combinedTeacherNames(entry) ? (
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {entry.teacher.name}
+                      {combinedTeacherNames(entry)}
                     </p>
                   ) : (
                     <p className="text-[11px] text-amber-600 mt-0.5">
@@ -167,9 +196,9 @@ export function TimetableManager({
       <FormModal
         title={
           editing
-            ? `Edit ${dayLabels[editing.day]} P${periods.find((p) => p.id === editing.period_id)?.period_number ?? ""}`
+            ? `Edit ${dayLabels[editing.day]} ${periodLabel(periods.find((p) => p.id === editing.period_id) as PeriodRow)}`
             : preset
-              ? `${dayLabels[preset.day]} · Period ${periods.find((p) => p.id === preset.period_id)?.period_number ?? ""}`
+              ? `${dayLabels[preset.day]} · ${periodLabel(periods.find((p) => p.id === preset.period_id) as PeriodRow)}`
               : "Timetable entry"
         }
         open={open}
@@ -190,42 +219,78 @@ export function TimetableManager({
               name="period_id"
               value={editing?.period_id ?? preset?.period_id ?? ""}
             />
-            <Select
-              label="Subject"
-              name="subject_id"
-              defaultValue={editing?.subject_id ?? ""}
-              required
-              error={fieldError(state, "subject_id")}
-            >
-              <option value="">Select subject</option>
-              {subjects
-                .filter((s) => s.short_name !== "Break")
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
+            <div>
+              <label className="label">Subjects</label>
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                {normalSubjects.map((s) => (
+                  <label
+                    key={s.id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1 text-sm cursor-pointer hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      name="subject_id"
+                      value={s.id}
+                      defaultChecked={selectedSubjectIds.includes(s.id)}
+                      className="accent-brand-600"
+                    />
+                    <span className="text-slate-700 truncate">{s.short_name ?? s.name}</span>
+                  </label>
                 ))}
-              {subjects
-                .filter((s) => s.short_name === "Break")
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
+                {specialSubjects.length > 0 ? (
+                  <div className="col-span-2 mt-1 pt-2 border-t border-slate-200">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+                      Special activities
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {specialSubjects.map((s) => (
+                        <label
+                          key={s.id}
+                          className="flex items-center gap-2 rounded-md px-2 py-1 text-sm cursor-pointer hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            name="subject_id"
+                            value={s.id}
+                            defaultChecked={selectedSubjectIds.includes(s.id)}
+                            className="accent-brand-600"
+                          />
+                          <span className="text-slate-700 truncate">{s.short_name ?? s.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              {fieldError(state, "subject_ids") ? (
+                <p className="text-sm text-red-600 mt-1">
+                  {fieldError(state, "subject_ids")}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <label className="label">Teachers</label>
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                {teachers.map((t) => (
+                  <label
+                    key={t.id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1 text-sm cursor-pointer hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      name="teacher_id"
+                      value={t.id}
+                      defaultChecked={selectedTeacherIds.includes(t.id)}
+                      className="accent-brand-600"
+                    />
+                    <span className="text-slate-700 truncate">{t.name}</span>
+                  </label>
                 ))}
-            </Select>
-            <Select
-              label="Teacher"
-              name="teacher_id"
-              defaultValue={editing?.teacher_id ?? ""}
-              error={fieldError(state, "teacher_id")}
-            >
-              <option value="">No teacher</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                First selected is the main teacher; you can pick several for combined cells.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Room</label>

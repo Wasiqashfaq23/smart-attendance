@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { LogOut, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { SignOutButton } from "@/components/SignOutButton";
 
 export function TopBar({
   name,
@@ -31,15 +32,7 @@ export function TopBar({
         <div className="w-9 h-9 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-semibold text-sm">
           {(name ?? "U").charAt(0).toUpperCase()}
         </div>
-        <form action="/api/auth/signout" method="post">
-          <button
-            type="submit"
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-red-600 px-2 py-1.5 rounded-lg hover:bg-red-50 transition"
-          >
-            <LogOut size={16} />
-            Sign out
-          </button>
-        </form>
+        <SignOutButton />
       </div>
     </header>
   );

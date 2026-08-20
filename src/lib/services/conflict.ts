@@ -63,7 +63,7 @@ export async function checkTimetableEntry(
     day: DayOfWeek;
     periodId: number;
     classId: number;
-    teacherId?: number | null;
+    teacherIds: number[];
   },
   excludeTimetableId?: number
 ): Promise<Conflict[]> {
@@ -77,14 +77,37 @@ export async function checkTimetableEntry(
   );
   conflicts.push(...classConflicts);
 
-  if (input.teacherId) {
+  for (const teacherId of input.teacherIds) {
     const teacherConflicts = await findTeacherConflicts(
       input.day,
       input.periodId,
-      input.teacherId,
+      teacherId,
       excludeTimetableId
     );
     conflicts.push(...teacherConflicts);
+  }
+
+  if (input.teacherIds.length > 0) {
+    const coConflicts = await prisma.timetableTeacher.findMany({
+      where: {
+        teacher_id: { in: input.teacherIds },
+        timetable: {
+          day: input.day,
+          period_id: input.periodId,
+          is_active: true,
+          id: excludeTimetableId ? { not: excludeTimetableId } : undefined,
+        },
+      },
+      include: { timetable: { include: { class: true } } },
+    });
+    for (const cc of coConflicts) {
+      if (input.teacherIds.includes(cc.teacher_id)) {
+        conflicts.push({
+          type: "teacher",
+          message: `${cc.timetable.class.name} already has this teacher (co-teacher) at the same time`,
+        });
+      }
+    }
   }
 
   return conflicts;

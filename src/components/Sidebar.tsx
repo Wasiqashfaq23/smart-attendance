@@ -30,14 +30,22 @@ const links = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar() {
+export function Sidebar({ logo }: { logo?: string | null }) {
   const pathname = usePathname();
   return (
     <aside className="w-60 shrink-0 bg-slate-950 text-slate-300 flex flex-col min-h-screen sticky top-0 h-screen">
       <div className="px-5 py-6 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center text-white font-bold">
-          ST
-        </div>
+        {logo ? (
+          <img
+            src={logo}
+            alt="School logo"
+            className="w-9 h-9 rounded-xl object-cover"
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center text-white font-bold">
+            ST
+          </div>
+        )}
         <div>
           <p className="text-white font-semibold text-sm leading-tight">
             Smart Timetable
