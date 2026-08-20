@@ -53,7 +53,7 @@ export async function MasterTimetable({
     `${hrefPrefix}${hrefPrefix.includes("?") ? "&" : "?"}day=${d}`;
 
   const entryFor = (classIndex: number, slotNumber: number) => {
-    const pid = data.slotPeriodId.get(slotNumber);
+    const pid = data.slotPeriodId[slotNumber];
     return pid != null ? data.grid[flat[classIndex].c.id]?.[pid] ?? null : null;
   };
 

@@ -42,7 +42,7 @@ export function LoginForm() {
           className="input"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="admin"
+          placeholder="mohib123"
           autoComplete="username"
           required
         />
@@ -62,9 +62,6 @@ export function LoginForm() {
       <button className="btn-primary w-full justify-center" disabled={loading}>
         {loading ? "Signing in…" : "Sign in"}
       </button>
-      <p className="text-xs text-slate-500 text-center">
-        Demo: admin / admin123 · scheduler / scheduler123
-      </p>
     </form>
   );
 }

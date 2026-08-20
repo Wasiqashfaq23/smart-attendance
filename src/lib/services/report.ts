@@ -221,11 +221,11 @@ export const getMasterDay = unstable_cache(
     }
     slots.sort((a, b) => a.period_number - b.period_number);
 
-    const slotPeriodId = new Map<number, number>();
+    const slotPeriodId: Record<number, number> = {};
     for (const s of slots) {
       const p =
         type === "friday" ? s.friday : type === "saturday" ? s.saturday : s.monThu;
-      if (p) slotPeriodId.set(s.period_number, p.id);
+      if (p) slotPeriodId[s.period_number] = p.id;
     }
 
     const grid: Record<number, Record<number, WeekEntry | null>> = {};
