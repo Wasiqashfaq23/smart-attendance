@@ -12,30 +12,36 @@ export default function SubstitutionsPage() {
   const [recommendations, setRecommendations] = useState<RecommendationReason[]>([]);
   const [showRecommendations, setShowRecommendations] = useState(false);
 
-  const { data: substitutions = [], isLoading } = useQuery({
+  const { data: rawSubstitutions = [], isLoading } = useQuery({
     queryKey: ["substitutions"],
     queryFn: () => api.getSubstitutions(),
   });
 
-  const { data: teachers = [] } = useQuery({
+  const { data: rawTeachers = [] } = useQuery({
     queryKey: ["teachers"],
     queryFn: api.getTeachers,
   });
 
-  const { data: classes = [] } = useQuery({
+  const { data: rawClasses = [] } = useQuery({
     queryKey: ["classes"],
     queryFn: api.getClasses,
   });
 
-  const { data: subjects = [] } = useQuery({
+  const { data: rawSubjects = [] } = useQuery({
     queryKey: ["subjects"],
     queryFn: api.getSubjects,
   });
 
-  const { data: periods = [] } = useQuery({
+  const { data: rawPeriods = [] } = useQuery({
     queryKey: ["periods"],
     queryFn: api.getPeriods,
   });
+
+  const substitutions = Array.isArray(rawSubstitutions) ? rawSubstitutions : [];
+  const teachers = Array.isArray(rawTeachers) ? rawTeachers : [];
+  const classes = Array.isArray(rawClasses) ? rawClasses : [];
+  const subjects = Array.isArray(rawSubjects) ? rawSubjects : [];
+  const periods = Array.isArray(rawPeriods) ? rawPeriods : [];
 
   const getRecommendationsMutation = useMutation({
     mutationFn: api.getRecommendations,

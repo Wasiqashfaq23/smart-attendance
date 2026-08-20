@@ -101,11 +101,17 @@ export default function TimetablePage() {
   const [editEntry, setEditEntry] = useState<any>(null);
   const qc = useQueryClient();
 
-  const { data: timetable = [], isLoading } = useQuery({ queryKey: ["timetable"], queryFn: api.getTimetable });
-  const { data: classes = [] } = useQuery({ queryKey: ["classes"], queryFn: api.getClasses });
-  const { data: teachers = [] } = useQuery({ queryKey: ["teachers"], queryFn: api.getTeachers });
-  const { data: subjects = [] } = useQuery({ queryKey: ["subjects"], queryFn: api.getSubjects });
-  const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: api.getPeriods });
+  const { data: rawTimetable = [], isLoading } = useQuery({ queryKey: ["timetable"], queryFn: api.getTimetable });
+  const { data: rawClasses = [] } = useQuery({ queryKey: ["classes"], queryFn: api.getClasses });
+  const { data: rawTeachers = [] } = useQuery({ queryKey: ["teachers"], queryFn: api.getTeachers });
+  const { data: rawSubjects = [] } = useQuery({ queryKey: ["subjects"], queryFn: api.getSubjects });
+  const { data: rawPeriods = [] } = useQuery({ queryKey: ["periods"], queryFn: api.getPeriods });
+
+  const timetable = Array.isArray(rawTimetable) ? rawTimetable : [];
+  const classes = Array.isArray(rawClasses) ? rawClasses : [];
+  const teachers = Array.isArray(rawTeachers) ? rawTeachers : [];
+  const subjects = Array.isArray(rawSubjects) ? rawSubjects : [];
+  const periods = Array.isArray(rawPeriods) ? rawPeriods : [];
 
   if (isLoading) return <div className="flex items-center justify-center h-96"><Loader className="animate-spin" /></div>;
 

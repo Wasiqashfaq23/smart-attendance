@@ -47,14 +47,22 @@ export default function DashboardPage() {
   const today = new Date();
   const todayDay = DAYS[today.getDay() - 1] || "monday";
 
-  const todayTimetable = timetable.filter((t) => t.day === todayDay && t.is_active);
-  const todayAbsences = dashboard?.today_absences || [];
-  const todaySubstitutions = dashboard?.today_substitutions || [];
+  const safeTimetable = Array.isArray(timetable) ? timetable : [];
+  const safeTeachers = Array.isArray(teachers) ? teachers : [];
+  const safeClasses = Array.isArray(classes) ? classes : [];
+  const safeSubjects = Array.isArray(subjects) ? subjects : [];
+  const safePeriods = Array.isArray(periods) ? periods : [];
+  const safeAbsences = Array.isArray(dashboard?.today_absences) ? dashboard.today_absences : [];
+  const safeSubstitutions = Array.isArray(dashboard?.today_substitutions) ? dashboard.today_substitutions : [];
 
-  const teacherMap = Object.fromEntries(teachers.map((t) => [t.id, t]));
-  const classMap = Object.fromEntries(classes.map((c) => [c.id, c]));
-  const subjectMap = Object.fromEntries(subjects.map((s) => [s.id, s]));
-  const periodMap = Object.fromEntries(periods.map((p) => [p.id, p]));
+  const todayTimetable = safeTimetable.filter((t) => t.day === todayDay && t.is_active);
+  const todayAbsences = safeAbsences;
+  const todaySubstitutions = safeSubstitutions;
+
+  const teacherMap = Object.fromEntries(safeTeachers.map((t) => [t.id, t]));
+  const classMap = Object.fromEntries(safeClasses.map((c) => [c.id, c]));
+  const subjectMap = Object.fromEntries(safeSubjects.map((s) => [s.id, s]));
+  const periodMap = Object.fromEntries(safePeriods.map((p) => [p.id, p]));
 
   return (
     <div className="space-y-6">
