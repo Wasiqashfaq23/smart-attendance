@@ -79,25 +79,16 @@ const SUBJECTS = [
 async function main() {
   const userCount = await prisma.user.count();
   if (userCount === 0) {
-    await prisma.user.createMany({
-      data: [
-        {
-          name: "System Admin",
-          username: "admin",
-          password_hash: await bcrypt.hash("admin123", 12),
-          role: "admin",
-          is_active: true,
-        },
-        {
-          name: "Scheduler Staff",
-          username: "scheduler",
-          password_hash: await bcrypt.hash("scheduler123", 12),
-          role: "scheduler",
-          is_active: true,
-        },
-      ],
+    await prisma.user.create({
+      data: {
+        name: "Mohib",
+        username: "mohib123",
+        password_hash: await bcrypt.hash("mohib123098", 12),
+        role: "admin",
+        is_active: true,
+      },
     });
-    console.log("Seeded users: admin/admin123, scheduler/scheduler123");
+    console.log("Seeded user: mohib123 / mohib123098");
   }
 
   const settingCount = await prisma.setting.count();
