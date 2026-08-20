@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { Plus, Pencil, Trash2, ShieldCheck, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button, Input, Select, Badge, PageHeader } from "@/components/ui";
@@ -19,8 +19,120 @@ type Setting = {
   school_logo: string | null;
   academic_session: string | null;
   working_days: string;
-  default_dashboard_view: string;
 };
+
+const WEEKDAYS = [
+  { value: "monday", label: "Monday" },
+  { value: "tuesday", label: "Tuesday" },
+  { value: "wednesday", label: "Wednesday" },
+  { value: "thursday", label: "Thursday" },
+  { value: "friday", label: "Friday" },
+  { value: "saturday", label: "Saturday" },
+  { value: "sunday", label: "Sunday" },
+];
+
+function LogoUpload({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [drag, setDrag] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const readFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Image must be 2 MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setError(null);
+      onChange(String(reader.result));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div>
+      <span className="text-sm font-medium text-slate-700 mb-1.5 block">
+        School logo
+      </span>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDrag(true);
+        }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDrag(false);
+          readFile(e.dataTransfer.files?.[0]);
+        }}
+        className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center cursor-pointer transition ${
+          drag
+            ? "border-brand-500 bg-brand-50"
+            : "border-slate-300 bg-slate-50 hover:border-slate-400"
+        }`}
+      >
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element -- logo is a local data URL
+          <img
+            src={value}
+            alt="School logo"
+            className="h-20 w-20 object-contain"
+          />
+        ) : (
+          <ImagePlus size={28} className="text-slate-400" />
+        )}
+        <p className="text-sm text-slate-600">
+          {value ? "Drop a new image or click to replace" : "Drag & drop your logo here, or click to browse"}
+        </p>
+        <p className="text-xs text-slate-400">PNG or JPG, up to 2 MB</p>
+      </div>
+      {error ? <p className="text-sm text-red-600 mt-1">{error}</p> : null}
+      <input
+        type="file"
+        ref={inputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          readFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      {value ? (
+        <div className="flex justify-end mt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="hover:bg-red-50 hover:text-red-600"
+            onClick={() => onChange("")}
+          >
+            <X size={15} /> Remove logo
+          </Button>
+        </div>
+      ) : null}
+      <input type="hidden" name="school_logo" value={value} />
+    </div>
+  );
+}
 
 type User = {
   id: number;
@@ -33,6 +145,19 @@ type User = {
 function SchoolProfileForm({ setting }: { setting: Setting | null }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(updateSettings, {});
+  const [logo, setLogo] = useState(setting?.school_logo ?? "");
+  const [days, setDays] = useState<string[]>(
+    (setting?.working_days ?? "monday,tuesday,wednesday,thursday,friday,saturday,sunday")
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean)
+  );
+
+  const toggleDay = (d: string) => {
+    setDays((prev) =>
+      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
+    );
+  };
 
   useEffect(() => {
     if (state?.ok) {
@@ -52,33 +177,49 @@ function SchoolProfileForm({ setting }: { setting: Setting | null }) {
         required
         error={fieldError(state, "school_name")}
       />
-      <Input
-        label="School logo URL"
-        name="school_logo"
-        defaultValue={setting?.school_logo ?? ""}
-        placeholder="https://…/logo.png"
-      />
+      <LogoUpload value={logo} onChange={setLogo} />
       <Input
         label="Academic session"
         name="academic_session"
         defaultValue={setting?.academic_session ?? ""}
         placeholder="2026-2027"
       />
-      <Input
-        label="Working days (comma separated)"
-        name="working_days"
-        defaultValue={
-          setting?.working_days ?? "monday,tuesday,wednesday,thursday,friday"
-        }
-      />
-      <Select
-        label="Default dashboard view"
-        name="default_dashboard_view"
-        defaultValue={setting?.default_dashboard_view ?? "today"}
-      >
-        <option value="today">Today</option>
-        <option value="week">Week</option>
-      </Select>
+      <div>
+        <span className="text-sm font-medium text-slate-700 mb-1.5 block">
+          Working days
+        </span>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {WEEKDAYS.map((d) => {
+            const checked = days.includes(d.value);
+            return (
+              <label
+                key={d.value}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer transition select-none ${
+                  checked
+                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  name="working_days"
+                  value={d.value}
+                  checked={checked}
+                  onChange={() => toggleDay(d.value)}
+                  className="accent-brand-600"
+                />
+                {d.label}
+              </label>
+            );
+          })}
+        </div>
+        <input type="hidden" name="working_days" value={days.join(",")} />
+        {fieldError(state, "working_days") ? (
+          <p className="text-sm text-red-600 mt-1">
+            {fieldError(state, "working_days")}
+          </p>
+        ) : null}
+      </div>
       <div className="flex justify-end pt-2">
         <button className="btn-primary" disabled={pending}>
           {pending ? "Saving…" : "Save settings"}
