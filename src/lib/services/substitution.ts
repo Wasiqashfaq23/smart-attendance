@@ -3,9 +3,15 @@ import type { DayOfWeek } from "@prisma/client";
 import { canAssignSubstitute } from "@/lib/services/conflict";
 
 export function weekdayOf(date: Date): DayOfWeek {
-  return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][
-    date.getUTCDay()
-  ] as DayOfWeek;
+  return [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ][date.getUTCDay()] as DayOfWeek;
 }
 
 export async function createSubstitutionsForAbsence(absenceId: number): Promise<number> {
@@ -20,20 +26,21 @@ export async function createSubstitutionsForAbsence(absenceId: number): Promise<
     where: { day, teacher_id: absence.teacher_id, is_active: true },
   });
 
-  let created = 0;
-  for (const entry of entries) {
-    const existing = await prisma.substitution.findFirst({
-      where: {
-        absence_id: absenceId,
-        date: absence.date,
-        period_id: entry.period_id,
-        class_id: entry.class_id,
-      },
-    });
-    if (existing) continue;
+  const existing = await prisma.substitution.findMany({
+    where: { absence_id: absenceId },
+    select: { period_id: true, class_id: true },
+  });
+  const existingKeys = new Set(
+    existing.map((e) => `${e.period_id}:${e.class_id}`)
+  );
 
-    await prisma.substitution.create({
-      data: {
+  const toCreate = entries.filter(
+    (entry) => !existingKeys.has(`${entry.period_id}:${entry.class_id}`)
+  );
+
+  if (toCreate.length > 0) {
+    await prisma.substitution.createMany({
+      data: toCreate.map((entry) => ({
         absence_id: absenceId,
         timetable_id: entry.id,
         original_teacher_id: absence.teacher_id,
@@ -42,13 +49,12 @@ export async function createSubstitutionsForAbsence(absenceId: number): Promise<
         period_id: entry.period_id,
         class_id: entry.class_id,
         subject_id: entry.subject_id,
-        status: "pending",
+        status: "pending" as const,
         notes: "Auto-created from absence",
-      },
+      })),
     });
-    created++;
   }
-  return created;
+  return toCreate.length;
 }
 
 export async function assignSubstitute(

@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/db";
 import { getClassWeekly } from "@/lib/services/report";
+import { getActiveClasses, getActiveTeachers, getActiveSubjects, getSetting } from "@/lib/queries";
+import { activeDays } from "@/lib/weekdays";
 import { TimetableManager } from "@/components/managers/TimetableManager";
 
 export const dynamic = "force-dynamic";
@@ -10,16 +11,11 @@ export default async function TimetablePage({
   searchParams: Promise<{ class?: string }>;
 }) {
   const sp = await searchParams;
-  const [classes, subjects, teachers] = await Promise.all([
-    prisma.classRoom.findMany({
-      where: { status: "active" },
-      orderBy: { name: "asc" },
-    }),
-    prisma.subject.findMany({ orderBy: { name: "asc" } }),
-    prisma.teacher.findMany({
-      where: { status: "active" },
-      orderBy: { name: "asc" },
-    }),
+  const [classes, subjects, teachers, settings] = await Promise.all([
+    getActiveClasses(),
+    getActiveSubjects(),
+    getActiveTeachers(),
+    getSetting(),
   ]);
 
   const requested = Number(sp.class);
@@ -28,7 +24,8 @@ export default async function TimetablePage({
       ? requested
       : classes[0]?.id ?? 0;
 
-  const data = classId ? await getClassWeekly(classId) : null;
+  const days = activeDays(settings?.working_days);
+  const data = classId ? await getClassWeekly(classId, days) : null;
 
   if (!data) {
     return (

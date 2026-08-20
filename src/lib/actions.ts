@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
@@ -137,6 +137,7 @@ export const createClass = withUser(async (user, data) => {
     section: nullableText(data, "section"),
     program: nullableText(data, "program"),
     class_code: text(data, "class_code"),
+    class_teacher_id: text(data, "class_teacher_id") || null,
     status: text(data, "status") || "active",
   });
   if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
@@ -153,6 +154,7 @@ export const updateClass = withUser(async (user, data) => {
     section: nullableText(data, "section"),
     program: nullableText(data, "program"),
     class_code: text(data, "class_code"),
+    class_teacher_id: text(data, "class_teacher_id") || null,
     status: text(data, "status") || "active",
   });
   if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
@@ -290,60 +292,94 @@ export const deletePeriod = withUser(async (user, data) => {
 });
 
 export const createTimetable = withUser(async (user, data) => {
+  const subjectIds = data
+    .getAll("subject_id")
+    .map((v) => Number(v))
+    .filter((n) => n > 0);
+  const teacherIds = data
+    .getAll("teacher_id")
+    .map((v) => Number(v))
+    .filter((n) => n > 0);
   const parsed = timetableSchema.safeParse({
     day: text(data, "day"),
     period_id: text(data, "period_id"),
     class_id: text(data, "class_id"),
-    subject_id: text(data, "subject_id"),
-    teacher_id: text(data, "teacher_id") || null,
+    subject_ids: subjectIds,
+    teacher_ids: teacherIds,
     room: nullableText(data, "room"),
     notes: nullableText(data, "notes"),
     is_active: text(data, "is_active") === "on" || text(data, "is_active") === "true",
   });
   if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   const d = parsed.data;
-  const teacherId = typeof d.teacher_id === "number" ? d.teacher_id : null;
   const conflicts = await checkTimetableEntry({
     day: d.day,
     periodId: d.period_id,
     classId: d.class_id,
-    teacherId: teacherId ?? undefined,
+    teacherIds: d.teacher_ids ?? [],
   });
   if (conflicts.length > 0) {
     return { ok: false, message: conflicts.map((c) => c.message).join(". ") };
   }
   try {
-    const rec = await prisma.timetable.create({ data: d as any });
+    const rec = await prisma.timetable.create({
+      data: {
+        day: d.day,
+        period_id: d.period_id,
+        class_id: d.class_id,
+        subject_id: d.subject_ids[0],
+        teacher_id: d.teacher_ids?.[0] ?? null,
+        room: d.room,
+        notes: d.notes,
+        is_active: d.is_active,
+        additionalSubjects:
+          d.subject_ids.length > 1
+            ? { create: d.subject_ids.slice(1).map((subject_id) => ({ subject_id })) }
+            : undefined,
+        additionalTeachers:
+          (d.teacher_ids ?? []).length > 1
+            ? { create: d.teacher_ids!.slice(1).map((teacher_id) => ({ teacher_id })) }
+            : undefined,
+      },
+    });
     await logAudit(user.username ?? "user", "Created", "Timetable", rec.id);
   } catch (e) {
     return postFailure(e);
   }
   revalidatePath("/timetable");
   revalidatePath("/");
+  updateTag("timetable");
   return { ok: true, message: "Timetable entry created" };
 });
 
 export const updateTimetable = withUser(async (user, data) => {
   const id = Number(data.get("id"));
+  const subjectIds = data
+    .getAll("subject_id")
+    .map((v) => Number(v))
+    .filter((n) => n > 0);
+  const teacherIds = data
+    .getAll("teacher_id")
+    .map((v) => Number(v))
+    .filter((n) => n > 0);
   const parsed = timetableSchema.safeParse({
     day: text(data, "day"),
     period_id: text(data, "period_id"),
     class_id: text(data, "class_id"),
-    subject_id: text(data, "subject_id"),
-    teacher_id: text(data, "teacher_id") || null,
+    subject_ids: subjectIds,
+    teacher_ids: teacherIds,
     room: nullableText(data, "room"),
     notes: nullableText(data, "notes"),
     is_active: text(data, "is_active") === "on" || text(data, "is_active") === "true",
   });
   if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   const d = parsed.data;
-  const teacherId = typeof d.teacher_id === "number" ? d.teacher_id : null;
   const conflicts = await checkTimetableEntry(
     {
       day: d.day,
       periodId: d.period_id,
       classId: d.class_id,
-      teacherId: teacherId ?? undefined,
+      teacherIds: d.teacher_ids ?? [],
     },
     id
   );
@@ -351,13 +387,38 @@ export const updateTimetable = withUser(async (user, data) => {
     return { ok: false, message: conflicts.map((c) => c.message).join(". ") };
   }
   try {
-    await prisma.timetable.update({ where: { id }, data: d as any });
+    await prisma.$transaction([
+      prisma.timetableSubject.deleteMany({ where: { timetable_id: id } }),
+      prisma.timetableTeacher.deleteMany({ where: { timetable_id: id } }),
+      prisma.timetable.update({
+        where: { id },
+        data: {
+          day: d.day,
+          period_id: d.period_id,
+          class_id: d.class_id,
+          subject_id: d.subject_ids[0],
+          teacher_id: d.teacher_ids?.[0] ?? null,
+          room: d.room,
+          notes: d.notes,
+          is_active: d.is_active,
+          additionalSubjects:
+            d.subject_ids.length > 1
+              ? { create: d.subject_ids.slice(1).map((subject_id) => ({ subject_id })) }
+              : undefined,
+          additionalTeachers:
+            (d.teacher_ids ?? []).length > 1
+              ? { create: d.teacher_ids!.slice(1).map((teacher_id) => ({ teacher_id })) }
+              : undefined,
+        },
+      }),
+    ]);
   } catch (e) {
     return postFailure(e);
   }
   await logAudit(user.username ?? "user", "Updated", "Timetable", id);
   revalidatePath("/timetable");
   revalidatePath("/");
+  updateTag("timetable");
   return { ok: true, message: "Timetable entry updated" };
 });
 
@@ -371,6 +432,7 @@ export const deleteTimetable = withUser(async (user, data) => {
   await logAudit(user.username ?? "user", "Deleted", "Timetable", id);
   revalidatePath("/timetable");
   revalidatePath("/");
+  updateTag("timetable");
   return { ok: true, message: "Timetable entry deleted" };
 });
 
@@ -525,12 +587,14 @@ export const deleteAvailability = withUser(async (user, data) => {
 
 export const updateSettings = withUser(async (user, data) => {
   await requireAdmin();
+  const workingDays = data.getAll("working_days").map(String);
   const parsed = settingsSchema.safeParse({
     school_name: text(data, "school_name"),
     school_logo: nullableText(data, "school_logo"),
     academic_session: nullableText(data, "academic_session"),
-    working_days: text(data, "working_days"),
-    default_dashboard_view: text(data, "default_dashboard_view"),
+    working_days: workingDays.length
+      ? workingDays.join(",")
+      : text(data, "working_days"),
   });
   if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   const setting = await prisma.setting.findFirst();
