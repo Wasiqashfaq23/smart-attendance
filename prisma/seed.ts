@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
-import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient({
   adapter: new PrismaNeon({ connectionString: process.env.DATABASE_URL! }),
@@ -77,20 +76,6 @@ const SUBJECTS = [
 ] as const;
 
 async function main() {
-  const userCount = await prisma.user.count();
-  if (userCount === 0) {
-    await prisma.user.create({
-      data: {
-        name: "Mohib",
-        username: "mohib123",
-        password_hash: await bcrypt.hash("mohib123098", 12),
-        role: "admin",
-        is_active: true,
-      },
-    });
-    console.log("Seeded user: mohib123 / mohib123098");
-  }
-
   const settingCount = await prisma.setting.count();
   if (settingCount === 0) {
     await prisma.setting.create({
