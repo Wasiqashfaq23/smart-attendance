@@ -25,8 +25,7 @@ wheels/
 *.db
 *.sqlite
 *.sqlite3
-smart_timetable.db
-backend/smart_timetable.db
+!backend/smart_timetable.db
 
 # Virtual environments
 .venv/
