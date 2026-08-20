@@ -42,7 +42,7 @@ export function LoginForm() {
           className="input"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="mohib123"
+          placeholder="Username"
           autoComplete="username"
           required
         />
