@@ -579,7 +579,11 @@ export const saveAvailability = withUser(async (user, data) => {
 
 export const deleteAvailability = withUser(async (user, data) => {
   const id = Number(data.get("id"));
-  await prisma.teacherAvailability.delete({ where: { id } });
+  try {
+    await prisma.teacherAvailability.delete({ where: { id } });
+  } catch (e) {
+    return postFailure(e);
+  }
   await logAudit(user.username ?? "user", "Deleted", "TeacherAvailability", id);
   revalidatePath("/availability");
   return { ok: true, message: "Availability removed" };
