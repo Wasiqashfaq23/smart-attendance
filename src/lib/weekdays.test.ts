@@ -59,8 +59,12 @@ describe("isWorkingDay", () => {
     expect(isWorkingDay("tuesday", "monday , tuesday , wednesday")).toBe(true);
   });
 
-  it("handles empty string (no working days)", () => {
-    expect(isWorkingDay("monday", "")).toBe(false);
+  it("treats empty string as no restriction", () => {
+    expect(isWorkingDay("monday", "")).toBe(true);
+  });
+
+  it("returns false when the string contains only empty tokens", () => {
+    expect(isWorkingDay("monday", "  ,  ")).toBe(false);
   });
 });
 

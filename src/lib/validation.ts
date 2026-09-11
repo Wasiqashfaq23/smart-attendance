@@ -120,7 +120,7 @@ export const userSchema = z.object({
 
 export function parseTimeToDate(hhmmss: string): Date {
   const [h, m, s] = hhmmss.split(":").map((x) => Number(x) || 0);
-  return new Date(Date.UTC(1970, 0, 1, h, m, s));
+  return new Date(Date.UTC(1970, 0, 1, h || 0, m || 0, s || 0));
 }
 
 export function formatTime(d: Date | string): string {

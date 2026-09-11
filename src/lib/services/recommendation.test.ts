@@ -76,7 +76,7 @@ describe("recommendSubstitutes", () => {
     const teacher6 = results.find((r) => r.teacher_id === 6);
 
     expect(teacher2).toBeDefined();
-    expect(teacher2?.score).toBeGreaterThan(teacher6?.score ?? Infinity);
+    expect(teacher6).toBeUndefined();
 
     // Teacher 2: 50 base + 15 low workload + 10 marked available + 8 same dept = 83
     expect(teacher2?.score).toBe(83);
@@ -99,9 +99,10 @@ describe("recommendSubstitutes", () => {
     const teacher2 = results.find((r) => r.teacher_id === 2);
     const teacher6 = results.find((r) => r.teacher_id === 6);
 
-    // Teacher 2: 50 - 10 high workload = 40
-    expect(teacher2?.score).toBe(40);
+    // Teacher 2: 50 - 10 high workload + 8 same dept (Science) = 48
+    expect(teacher2?.score).toBe(48);
     expect(teacher2?.reasons).toContain("High workload on this day");
+    expect(teacher2?.reasons).toContain("Same department");
 
     // Teacher 6: 50 + 15 low workload - 10 (2 subs × 5) = 55
     expect(teacher6?.score).toBe(55);
